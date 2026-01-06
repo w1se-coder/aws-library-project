@@ -1,0 +1,12 @@
+# Gereksiz kütüphaneler
+node_modules/
+dist/
+package-lock.json
+
+# AWS CDK çıktıları (Çok yer kaplar, gereksizdir)
+cdk.out/
+.env
+
+# İşletim sistemi dosyaları
+.DS_Store
+Thumbs.db

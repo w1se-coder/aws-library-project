@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Kütüphane Otomasyonu</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://unpkg.com/amazon-cognito-identity-js@6.3.7/dist/amazon-cognito-identity.min.js"></script>
+    
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        .book-card:hover { transform: translateY(-5px); }
+        
+        /* Chat Widget Animasyonları */
+        .chat-widget { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .chat-widget.closed { transform: translateY(120%); opacity: 0; pointer-events: none; }
+        .chat-widget.open { transform: translateY(0); opacity: 1; pointer-events: auto; }
+        
+        /* Scrollbar Düzeni */
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen flex flex-col overflow-hidden">
+
+    <nav class="bg-white border-b border-slate-200 shadow-sm z-20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center cursor-pointer" onclick="showAllBooks()">
+                    <i class="fas fa-book-reader text-blue-600 text-2xl mr-3"></i>
+                    <span class="font-bold text-xl tracking-tight text-slate-900">LibSys AI</span>
+                </div>
+                
+                <div class="flex items-center space-x-6">
+                    <button onclick="showAllBooks()" class="text-slate-600 hover:text-blue-600 font-medium text-sm transition">Ana Sayfa</button>
+                    <button onclick="showFavorites()" class="text-slate-600 hover:text-red-500 font-medium text-sm transition flex items-center">
+                        <i class="fas fa-heart mr-1"></i> Favorilerim
+                    </button>
+                    <div class="h-4 w-px bg-slate-300"></div>
+                    
+                    <div id="user-info" class="hidden flex items-center space-x-3">
+                        <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <span class="text-sm text-slate-600 font-medium" id="user-name-display">Kullanıcı</span>
+                        <button onclick="logout()" class="text-sm text-red-500 hover:text-red-700 font-medium" title="Çıkış Yap">
+                            <i class="fas fa-sign-out-alt"></i>
+                        </button>
+                    </div>
+
+                    <button id="login-btn-nav" onclick="showLoginModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition shadow-sm shadow-blue-600/30">
+                        Giriş Yap
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-1 overflow-y-auto custom-scroll relative">
+        
+        <div class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-16">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                <h1 class="text-4xl font-bold mb-4">Geleceğin Kütüphanesine Hoş Geldiniz</h1>
+                <p class="text-blue-100 text-lg max-w-2xl mx-auto">Yapay zeka destekli asistanımız ile kitapları keşfedin, favorilerinize ekleyin ve kütüphane deneyiminizi zenginleştirin.</p>
+            </div>
+        </div>
+
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                <h2 id="page-title" class="text-2xl font-bold text-slate-800">Kütüphane Arşivi</h2>
+                
+                <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+                    
+                    <div class="relative">
+                        <button onclick="toggleFilterDropdown()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm bg-white hover:bg-slate-50 text-slate-700 flex items-center space-x-2 shadow-sm transition">
+                            <i class="fas fa-filter text-slate-400"></i>
+                            <span>Filtrele & Ara</span>
+                            <i class="fas fa-chevron-down text-xs text-slate-400 ml-1"></i>
+                        </button>
+                        
+                        <div id="filter-dropdown" class="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-100 p-4 hidden z-50">
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-500 mb-1 block">Arama</label>
+                                    <div class="relative">
+                                        <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"></i>
+                                        <input type="text" id="search-input" placeholder="Kitap, yazar, ISBN..." 
+                                            class="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition"
+                                            oninput="filterBooks()">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-500 mb-1 block">Tür</label>
+                                    <select id="genre-filter" onchange="filterBooks()" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white transition">
+                                        <option value="">Tüm Türler</option>
+                                        <option value="Roman">Roman</option>
+                                        <option value="Bilim Kurgu / Fantastik">Bilim Kurgu / Fantastik</option>
+                                        <option value="Tarih">Tarih</option>
+                                        <option value="Otobiyografi / Biyografi">Otobiyografi / Biyografi</option>
+                                        <option value="Bilim">Bilim</option>
+                                        <option value="Edebiyat">Edebiyat</option>
+                                        <option value="Akademik">Akademik</option>
+                                        <option value="Kişisel Gelişim">Kişisel Gelişim</option>
+                                        <option value="Diğer">Diğer</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-500 mb-1 block">Durum</label>
+                                    <select id="status-filter" onchange="filterBooks()" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white transition">
+                                        <option value="">Tüm Durumlar</option>
+                                        <option value="Müsait">Müsait</option>
+                                        <option value="Ödünç Verilmiş">Ödünç Verilmiş</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button onclick="openAddBookModal()" class="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm hover:bg-slate-800 flex items-center whitespace-nowrap shadow-md transition transform active:scale-95">
+                        <i class="fas fa-plus mr-2"></i> Kitap Ekle
+                    </button>
+                </div>
+            </div>
+
+            <div id="book-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div class="col-span-full text-center py-20">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p class="text-slate-500">Kütüphane yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <button onclick="toggleChat()" class="fixed bottom-6 right-6 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition transform hover:scale-110 z-30 flex items-center justify-center w-16 h-16">
+        <i class="fas fa-robot text-2xl"></i>
+    </button>
+
+    <div id="chat-widget" class="chat-widget closed fixed bottom-24 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col border border-slate-200 z-30 overflow-hidden">
+        <div class="bg-blue-600 p-4 flex justify-between items-center cursor-pointer" onclick="toggleChat()">
+            <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-white backdrop-blur-sm">
+                    <i class="fas fa-robot text-sm"></i>
+                </div>
+                <div>
+                    <h3 class="text-white font-bold text-sm">AI Asistan</h3>
+                    <p class="text-blue-100 text-xs flex items-center"><span class="w-2 h-2 bg-green-400 rounded-full mr-1"></span> Çevrimiçi</p>
+                </div>
+            </div>
+            <button class="text-white/80 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div id="messages" class="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 custom-scroll">
+            <div class="flex justify-start">
+                <div class="bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tl-none py-3 px-4 max-w-[85%] shadow-sm text-sm">
+                    <p>Merhaba! Ben kütüphane asistanınızım. 🤖<br>Size nasıl yardımcı olabilirim?</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-4 bg-white border-t border-slate-100">
+            <form id="chat-form" class="flex space-x-2">
+                <input type="text" id="message-input" class="flex-1 px-4 py-2 bg-slate-100 border-0 rounded-full focus:ring-2 focus:ring-blue-500 text-sm outline-none transition" placeholder="Bir soru sorun..." autocomplete="off">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white w-10 h-10 rounded-full transition flex items-center justify-center shadow-md transform active:scale-95">
+                    <i class="fas fa-paper-plane text-sm"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="login-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md relative animate-[fadeIn_0.3s_ease-out]">
+            <button onclick="closeLoginModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            
+            <div class="text-center mb-6">
+                <div class="bg-blue-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 text-blue-600">
+                    <i class="fas fa-user text-xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-800">Giriş Yap</h2>
+                <p class="text-slate-500 text-sm mt-1">Kütüphane hesabınıza erişin</p>
+            </div>
+
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Kullanıcı Adı</label>
+                    <input type="text" id="username" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Şifre</label>
+                    <input type="password" id="password" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                </div>
+                <div id="login-error" class="text-red-500 text-sm text-center hidden bg-red-50 p-2 rounded border border-red-100"></div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition shadow-lg shadow-blue-600/20">
+                    Giriş Yap
+                </button>
+            </form>
+            
+            <div class="mt-6 text-center pt-4 border-t border-slate-100">
+                <p class="text-slate-600 text-sm">
+                    Hesabın yok mu? <a href="#" onclick="showRegisterModal(); closeLoginModal()" class="text-blue-600 font-semibold hover:underline">Kayıt Ol</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div id="register-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md relative animate-[fadeIn_0.3s_ease-out]">
+            <button onclick="closeRegisterModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            
+            <div class="text-center mb-6">
+                <div class="bg-green-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 text-green-600">
+                    <i class="fas fa-user-plus text-xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-800">Hesap Oluştur</h2>
+                <p class="text-slate-500 text-sm mt-1">Kütüphane dünyasına katılın</p>
+            </div>
+
+            <form id="register-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Kullanıcı Adı</label>
+                    <input type="text" id="reg-username" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">E-posta</label>
+                    <input type="email" id="reg-email" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Şifre</label>
+                    <input type="password" id="reg-password" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition" required>
+                </div>
+                <div id="register-error" class="text-red-500 text-sm text-center hidden bg-red-50 p-2 rounded border border-red-100"></div>
+                <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition shadow-lg shadow-green-600/20">
+                    Kayıt Ol
+                </button>
+            </form>
+
+            <div class="mt-6 text-center pt-4 border-t border-slate-100">
+                <p class="text-slate-600 text-sm">
+                    Zaten hesabın var mı? <a href="#" onclick="showLoginModal(); closeRegisterModal()" class="text-blue-600 font-semibold hover:underline">Giriş Yap</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div id="verify-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md relative animate-[fadeIn_0.3s_ease-out]">
+            <div class="text-center mb-6">
+                <div class="bg-blue-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 text-blue-600">
+                    <i class="fas fa-envelope-open-text text-xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-800">E-postanı Doğrula</h2>
+                <p class="text-slate-500 text-sm mt-1">E-posta adresinize gelen kodu girin.</p>
+            </div>
+            
+            <form id="verify-form" class="space-y-4">
+                <input type="hidden" id="verify-username">
+                <div>
+                    <input type="text" id="verify-code" placeholder="XXXXXX" class="w-full px-4 py-3 text-center text-2xl tracking-[0.5em] font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                </div>
+                <div id="verify-error" class="text-red-500 text-sm text-center hidden bg-red-50 p-2 rounded"></div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition shadow-lg shadow-blue-600/20">
+                    Doğrula ve Giriş Yap
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="add-book-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-lg relative max-h-[90vh] overflow-y-auto animate-[fadeIn_0.3s_ease-out]">
+            <button onclick="closeAddBookModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-slate-800">Yeni Kitap Ekle</h2>
+                <p class="text-slate-500 text-sm mt-1">Kütüphane kataloğuna yeni bir eser ekleyin</p>
+            </div>
+
+            <form id="add-book-form" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Kitap Adı</label>
+                        <input type="text" id="new-book-title" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Yazar</label>
+                        <input type="text" id="new-book-author" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Kapak Resmi URL</label>
+                    <input type="url" id="new-book-cover" placeholder="https://..." class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Tür</label>
+                        <select id="new-book-genre" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition">
+                            <option>Roman</option>
+                            <option>Bilim Kurgu / Fantastik</option>
+                            <option>Tarih</option>
+                            <option>Otobiyografi / Biyografi</option>
+                            <option>Bilim</option>
+                            <option>Edebiyat</option>
+                            <option>Akademik</option>
+                            <option>Kişisel Gelişim</option>
+                            <option>Diğer</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">ISBN</label>
+                        <input type="text" id="new-book-isbn" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Açıklama</label>
+                    <textarea id="new-book-desc" rows="3" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"></textarea>
+                </div>
+                
+                <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-lg transition shadow-lg">
+                    Kitabı Kaydet
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="edit-book-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-lg relative max-h-[90vh] overflow-y-auto animate-[fadeIn_0.3s_ease-out]">
+            <button onclick="closeEditBookModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-slate-800">Kitap Düzenle</h2>
+                <p class="text-slate-500 text-sm mt-1">Kitap bilgilerini güncelleyin</p>
+            </div>
+
+            <form id="edit-book-form" class="space-y-4">
+                <input type="hidden" id="edit-book-id">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Kitap Adı</label>
+                        <input type="text" id="edit-book-title" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Yazar</label>
+                        <input type="text" id="edit-book-author" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Kapak Resmi URL</label>
+                    <input type="url" id="edit-book-cover" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Tür</label>
+                        <select id="edit-book-genre" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition">
+                            <option value="Roman">Roman</option>
+                            <option value="Bilim Kurgu / Fantastik">Bilim Kurgu / Fantastik</option>
+                            <option value="Tarih">Tarih</option>
+                            <option value="Otobiyografi / Biyografi">Otobiyografi / Biyografi</option>
+                            <option value="Bilim">Bilim</option>
+                            <option value="Edebiyat">Edebiyat</option>
+                            <option value="Akademik">Akademik</option>
+                            <option value="Kişisel Gelişim">Kişisel Gelişim</option>
+                            <option value="Diğer">Diğer</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Durum</label>
+                        <select id="edit-book-status" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition">
+                            <option value="Müsait">Müsait</option>
+                            <option value="Ödünç Verilmiş">Ödünç Verilmiş</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">ISBN</label>
+                    <input type="text" id="edit-book-isbn" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Açıklama</label>
+                    <textarea id="edit-book-desc" rows="3" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"></textarea>
+                </div>
+                
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition shadow-lg">
+                    Değişiklikleri Kaydet
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="book-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col md:flex-row max-h-[90vh] relative animate-[fadeIn_0.3s_ease-out]">
+            <button onclick="closeBookModal()" class="absolute top-4 right-4 z-10 bg-white/80 p-2 rounded-full hover:bg-white text-slate-800 transition shadow-sm">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+
+            <div class="md:w-1/3 bg-slate-100 relative flex items-center justify-center p-4">
+                <img id="modal-book-image" src="" alt="Book Cover" class="max-w-full max-h-[400px] object-contain shadow-lg rounded">
+            </div>
+
+            <div class="p-8 md:w-2/3 flex flex-col overflow-y-auto">
+                <div class="flex items-center gap-2 mb-2">
+                    <span id="modal-book-genre" class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold uppercase tracking-wide">ROMAN</span>
+                </div>
+                
+                <h2 id="modal-book-title" class="text-3xl font-bold text-slate-900 mb-1 leading-tight"></h2>
+                <p id="modal-book-author" class="text-xl text-slate-500 mb-6 font-serif italic"></p>
+                
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                        <span class="text-xs text-slate-400 block uppercase font-bold">ISBN</span>
+                        <span id="modal-book-isbn" class="font-mono text-slate-700"></span>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                        <span class="text-xs text-slate-400 block uppercase font-bold">Basım</span>
+                        <span id="modal-book-date" class="text-slate-700"></span>
+                    </div>
+                </div>
+
+                <div id="borrow-details" class="hidden bg-orange-50 border border-orange-100 rounded-lg p-4 mb-6">
+                    <h4 class="font-semibold text-orange-800 mb-2 flex items-center text-sm">
+                        <i class="fas fa-clock mr-2"></i> Ödünç Durumu
+                    </h4>
+                    <span class="text-sm text-orange-700">Bu kitap şu an ödünç verilmiş durumda.</span>
+                </div>
+
+                <div class="prose prose-slate mb-8">
+                    <h3 class="text-sm font-bold text-slate-900 mb-2 uppercase tracking-wide">Özet</h3>
+                    <p id="modal-book-desc" class="text-slate-600 leading-relaxed text-sm"></p>
+                </div>
+
+                <div class="mt-auto pt-6 border-t border-slate-100 flex space-x-3" id="modal-actions">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
