@@ -1,5 +1,9 @@
 # 📚 AI-Powered Library Automation System
 
+**Student Name:** Emirhan Ergin
+**Student ID:** 210212023
+**Department:** Computer Engineering
+
 This project is a cloud-native library management system enhanced with AI capabilities. It allows users to browse books, authenticate securely, and manage their favorite collections with a responsive frontend and serverless backend.
 
 ## 🚀 Live Demo
